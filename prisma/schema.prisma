@@ -1,0 +1,407 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// ENUMS
+// ==========================================
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum AccountType {
+  BUSINESS
+  CREATOR
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+  REEL
+  CAROUSEL
+  STORY
+}
+
+enum PostStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHING
+  PUBLISHED
+  FAILED
+}
+
+enum ScheduleStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum PublishStatus {
+  INITIATED
+  CONTAINER_CREATED
+  PROCESSING
+  SUCCESS
+  FAILED
+}
+
+enum NotificationType {
+  POST_PUBLISHED
+  POST_FAILED
+  TOKEN_EXPIRING
+  TOKEN_EXPIRED
+  SCHEDULED_REMINDER
+  ACCOUNT_DISCONNECTED
+  SYSTEM
+}
+
+// ==========================================
+// MODELS
+// ==========================================
+
+/// Core application user
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  passwordHash  String?
+  image         String?
+  role          Role      @default(USER)
+  emailVerified DateTime?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  instagramAccounts InstagramAccount[]
+  media             Media[]
+  posts             Post[]
+  scheduledPosts    ScheduledPost[]
+  drafts            Draft[]
+  notifications     Notification[]
+  activityLogs      ActivityLog[]
+
+  @@index([email])
+}
+
+/// Connected Instagram Professional / Creator account via Meta Graph API
+model InstagramAccount {
+  id                String      @id @default(cuid())
+  userId            String
+  instagramId       String      @unique // External Instagram Business Account ID
+  username          String
+  name              String?
+  profilePictureUrl String?
+  accountType       AccountType @default(BUSINESS)
+  facebookPageId    String? // Linked Facebook Page ID required for Graph API
+  facebookPageName  String?
+  isActive          Boolean     @default(true)
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  oauthToken     OAuthToken?
+  posts          Post[]
+  scheduledPosts ScheduledPost[]
+  drafts         Draft[]
+  analytics      Analytics[]
+
+  @@index([userId])
+  @@index([username])
+}
+
+/// OAuth credentials and token lifecycle for Meta / Instagram API
+model OAuthToken {
+  id                 String    @id @default(cuid())
+  instagramAccountId String    @unique
+  accessToken        String    @db.Text
+  tokenType          String    @default("Bearer")
+  scope              String    @db.Text
+  expiresAt          DateTime // Long-lived access tokens expire ~60 days
+  refreshToken       String?   @db.Text
+  refreshedAt        DateTime?
+  isValid            Boolean   @default(true)
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  instagramAccount InstagramAccount @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
+
+  @@index([instagramAccountId])
+  @@index([expiresAt])
+}
+
+/// Uploaded media assets (images, reels, videos)
+model Media {
+  id           String    @id @default(cuid())
+  userId       String
+  url          String    @db.Text // Publicly accessible storage URL (S3, Cloud Storage, Cloudinary)
+  thumbnailUrl String?   @db.Text
+  fileType     MediaType @default(IMAGE)
+  mimeType     String
+  fileSize     Int // Size in bytes
+  width        Int?
+  height       Int?
+  duration     Float? // In seconds for video / reels
+  caption      String?   @db.Text
+  storageKey   String? // S3/GCS object key for cleanup
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  postMedia  PostMedia[]
+  draftMedia DraftMedia[]
+
+  @@index([userId])
+  @@index([fileType])
+}
+
+/// Instagram Post entity
+model Post {
+  id                 String     @id @default(cuid())
+  userId             String
+  instagramAccountId String
+  caption            String?    @db.Text
+  mediaType          MediaType  @default(IMAGE)
+  status             PostStatus @default(DRAFT)
+  igMediaId          String?    @unique // Published media ID on Instagram
+  igPermalink        String? // Public URL on Instagram
+  publishedAt        DateTime?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  instagramAccount   InstagramAccount    @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
+  media              PostMedia[]
+  scheduledPost      ScheduledPost?
+  publishingAttempts PublishingAttempt[]
+  analytics          Analytics[]
+
+  @@index([userId])
+  @@index([instagramAccountId])
+  @@index([status])
+  @@index([publishedAt])
+}
+
+/// Ordered media items belonging to a Post (supporting Carousels & single media)
+model PostMedia {
+  id        String   @id @default(cuid())
+  postId    String
+  mediaId   String
+  order     Int      @default(0) // Order index for carousels (0, 1, 2, ...)
+  createdAt DateTime @default(now())
+
+  post  Post  @relation(fields: [postId], references: [id], onDelete: Cascade)
+  media Media @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, mediaId])
+  @@index([postId, order])
+  @@index([mediaId])
+}
+
+/// Scheduling details and queue execution state
+model ScheduledPost {
+  id                 String         @id @default(cuid())
+  userId             String
+  instagramAccountId String
+  postId             String         @unique
+  scheduledFor       DateTime // Target publish time
+  timezone           String         @default("UTC")
+  status             ScheduleStatus @default(PENDING)
+  retryCount         Int            @default(0)
+  maxRetries         Int            @default(3)
+  lastError          String?        @db.Text
+  lockedAt           DateTime? // Distributed worker lock timestamp
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  instagramAccount InstagramAccount @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
+  post             Post             @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([status, scheduledFor]) // Optimal index for polling upcoming pending schedules
+  @@index([userId])
+  @@index([instagramAccountId])
+}
+
+/// Unfinished post concepts, drafts, and staging content
+model Draft {
+  id                 String    @id @default(cuid())
+  userId             String
+  instagramAccountId String?
+  title              String?
+  caption            String?   @db.Text
+  mediaType          MediaType @default(IMAGE)
+  hashtags           String[]  @default([])
+  tags               Json? // Mentions, location tags, user tags
+  metadata           Json? // Flexible extra settings
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  instagramAccount InstagramAccount? @relation(fields: [instagramAccountId], references: [id], onDelete: SetNull)
+  media            DraftMedia[]
+
+  @@index([userId])
+  @@index([instagramAccountId])
+}
+
+/// Ordered media items belonging to a Draft
+model DraftMedia {
+  id        String   @id @default(cuid())
+  draftId   String
+  mediaId   String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  draft Draft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  media Media @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@unique([draftId, mediaId])
+  @@index([draftId, order])
+  @@index([mediaId])
+}
+
+/// Granular audit trail for each Meta Graph API publishing execution
+model PublishingAttempt {
+  id              String        @id @default(cuid())
+  postId          String
+  status          PublishStatus @default(INITIATED)
+  creationId      String? // Meta Media Container ID
+  statusCode      Int? // HTTP response status or Meta error code
+  errorMessage    String?       @db.Text
+  errorSubcode    Int? // Meta Graph API error_subcode
+  requestPayload  Json? // Outgoing API request details
+  responsePayload Json? // Raw response from Meta Graph API
+  attemptNumber   Int           @default(1)
+  startedAt       DateTime      @default(now())
+  completedAt     DateTime?
+  durationMs      Int? // Time taken for attempt in milliseconds
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([status])
+  @@index([creationId])
+  @@index([startedAt])
+}
+
+/// Performance metrics for posts and account-level snapshots
+model Analytics {
+  id                 String   @id @default(cuid())
+  postId             String? // Nullable if snapshot is account-level
+  instagramAccountId String
+  recordedAt         DateTime @default(now())
+
+  // Post metrics
+  impressions    Int    @default(0)
+  reach          Int    @default(0)
+  likes          Int    @default(0)
+  comments       Int    @default(0)
+  shares         Int    @default(0)
+  saved          Int    @default(0)
+  videoViews     Int?
+  engagementRate Float?
+
+  // Account-level snapshot metrics
+  followersCount Int?
+  followsCount   Int?
+  profileViews   Int?
+  websiteClicks  Int?
+
+  // Raw API insights response payload
+  rawInsights Json?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  post             Post?            @relation(fields: [postId], references: [id], onDelete: Cascade)
+  instagramAccount InstagramAccount @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([instagramAccountId])
+  @@index([recordedAt])
+}
+
+/// In-app and system alerts for users
+model Notification {
+  id       String           @id @default(cuid())
+  userId   String
+  type     NotificationType
+  title    String
+  message  String           @db.Text
+  isRead   Boolean          @default(false)
+  readAt   DateTime?
+  link     String? // Direct navigation URL (e.g., to post or account settings)
+  metadata Json?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+}
+
+/// Comprehensive audit log for actions performed by users or automated workers
+model ActivityLog {
+  id          String  @id @default(cuid())
+  userId      String? // Nullable for background system actions
+  action      String // e.g., USER_LOGIN, ACCOUNT_CONNECTED, POST_SCHEDULED, POST_PUBLISHED
+  entityType  String // e.g., Post, InstagramAccount, Draft, ScheduledPost
+  entityId    String?
+  description String  @db.Text
+  ipAddress   String?
+  userAgent   String?
+  details     Json? // Contextual payload or state before/after change
+
+  // Timestamps
+  createdAt DateTime @default(now())
+
+  // Relationships
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([action])
+  @@index([createdAt])
+}
