@@ -1,27 +1,44 @@
+@import url("https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --background: #090a0c;
+  --foreground: #e2e4ec;
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  overscroll-behavior: none;
+}
+
+/* Hide scrollbars smoothly as per studio design */
+::-webkit-scrollbar {
+  display: none;
 }
 
 @layer utilities {
   .text-balance {
     text-wrap: balance;
   }
+}
+
+/* Studio Precision Darkroom Grid */
+.darkroom-grid {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Architectural Hairline Panel */
+.studio-card {
+  background: #121418;
+  border: 1px solid #1f222b;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.studio-card:hover {
+  border-color: #2e3340;
 }

@@ -8,16 +8,26 @@
     "start": "next start",
     "lint": "next lint",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "test:instagram": "npx tsx scripts/test-instagram.ts",
+    "test:webhook": "npx tsx scripts/test-webhook.ts",
+    "worker": "npx tsx scripts/worker.ts",
+    "test:publish": "npx tsx scripts/test-real-publish.ts",
+    "test:analytics": "npx tsx scripts/test-analytics.ts",
+    "test:errors": "npx tsx scripts/test-error-handling.ts"
   },
   "dependencies": {
     "@next/swc-win32-x64-msvc": "^14.2.33",
     "@prisma/client": "^5.22.0",
+    "bcryptjs": "^3.0.3",
     "next": "14.2.35",
+    "next-auth": "^4.24.15",
     "react": "^18",
-    "react-dom": "^18"
+    "react-dom": "^18",
+    "zod": "^4.6.4"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
