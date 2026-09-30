@@ -12,8 +12,8 @@ async function runWebhookTests() {
   console.log("   Instagram Webhook Handshake & Signature Tests  ");
   console.log("==================================================");
 
-  const verifyToken = "insta_automate_verify_token_secure";
-  const appSecret = "test_meta_app_secret_123456";
+  const verifyToken = process.env.INSTAGRAM_WEBHOOK_VERIFY_TOKEN || "test_verify_token_sample";
+  const appSecret = process.env.META_APP_SECRET || "test_meta_app_secret_sample";
 
   process.env.INSTAGRAM_WEBHOOK_VERIFY_TOKEN = verifyToken;
   process.env.META_APP_SECRET = appSecret;

@@ -30,13 +30,16 @@ export const authOptions: NextAuthOptions = {
         const { email, password } = parsed.data;
 
         // Dedicated Demo Account shortcut
+        const demoEmail = process.env.DEMO_USER_EMAIL || "demo@instaflow.studio";
+        const demoPassword = process.env.DEMO_USER_PASSWORD || "password123";
+
         if (
-          email.toLowerCase() === "demo@instaflow.studio" &&
-          password === "password123"
+          email.toLowerCase() === demoEmail.toLowerCase() &&
+          password === demoPassword
         ) {
           return {
             id: "demo-user-1",
-            email: "demo@instaflow.studio",
+            email: demoEmail,
             name: "Elena Vance",
             role: "USER",
           };

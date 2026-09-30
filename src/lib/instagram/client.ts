@@ -273,7 +273,7 @@ export class InstagramApiClient {
    */
   async exchangeForLongLivedToken(
     shortLivedToken: string,
-    appId: string = process.env.META_APP_ID || "2125514704722542",
+    appId: string = process.env.META_APP_ID || "",
     appSecret: string = process.env.META_APP_SECRET || ""
   ): Promise<LongLivedTokenResponse> {
     const params = new URLSearchParams({
