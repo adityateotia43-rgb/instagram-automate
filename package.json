@@ -17,7 +17,6 @@
     "test:errors": "npx tsx scripts/test-error-handling.ts"
   },
   "dependencies": {
-    "@next/swc-win32-x64-msvc": "^14.2.33",
     "@prisma/client": "^5.22.0",
     "bcryptjs": "^3.0.3",
     "next": "14.2.35",
