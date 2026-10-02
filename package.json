@@ -14,7 +14,8 @@
     "worker": "npx tsx scripts/worker.ts",
     "test:publish": "npx tsx scripts/test-real-publish.ts",
     "test:analytics": "npx tsx scripts/test-analytics.ts",
-    "test:errors": "npx tsx scripts/test-error-handling.ts"
+    "test:errors": "npx tsx scripts/test-error-handling.ts",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
